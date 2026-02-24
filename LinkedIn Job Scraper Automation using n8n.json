@@ -1,0 +1,379 @@
+{
+  "name": "LinkedIn Job Scraper Automation using n8n",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "id": "27ed0320-bfff-499f-befd-be3997247978",
+      "name": "Daily Job Search",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        112,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "Job Title",
+              "value": "Data Analyst",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "Location",
+              "value": "Germany",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "bc89eec8-f642-4f53-92e8-771d7d3dfe7b",
+      "name": "Prepare Job Titles",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        320,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "actorId": {
+          "__rl": true,
+          "value": "JkfTWxtpgfvcRQn3p",
+          "mode": "list",
+          "cachedResultName": "⚡️Rapid Linkedin Jobs Scraper | Free Jobs Scraper (worldunboxer/rapid-linkedin-scraper)",
+          "cachedResultUrl": "https://console.apify.com/actors/JkfTWxtpgfvcRQn3p/input"
+        },
+        "customBody": "{\n    \"experience_level\": \"3\",\n    \"job_post_time\": \"r604800\",\n    \"job_title\": \"Data Analyst\",\n    \"job_type\": \"F\",\n    \"jobs_entries\": 23,\n    \"location\": \"Germany\",\n    \"start_jobs\": 10,\n    \"work_schedule\": \"3\"\n}",
+        "timeout": {}
+      },
+      "type": "@apify/n8n-nodes-apify.apify",
+      "typeVersion": 1,
+      "position": [
+        528,
+        304
+      ],
+      "id": "bd51df29-cfbd-4dac-aef2-07bcc811205f",
+      "name": "Run an Actor",
+      "credentials": {
+        "apifyApi": {
+          "id": "sbac2a68WvbbF2UQ",
+          "name": "Apify account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a Data Analyst. I will give you data scraped from LinkedIn via Apify, which includes a company’s LinkedIn URL. \n\nYour task:\n1. Go to the LinkedIn company page from the provided `companyUrl`.\n2. Find and extract the official company website link listed on that LinkedIn company profile.\n3. Visit that website and scrape or identify the most relevant company contact email (for business or hiring inquiries). \n   - Prefer generic addresses like contact@, info@, hr@, careers@, or any email in the site’s footer or contact page.\n4. Return the results in this structured JSON format:\n\n{\n  \"companyName\": \"{{ $json.company_name }}\",\n  \"companyUrl\": \"{{ $json.company_url }}\",\n  \"companyWebsite\": \"\",\n  \"companyEmail\": \"\"\n}\n\nHere is the LinkedIn company data:\ncompanyName: {{ $json.company_name }}\ncompanyUrl: {{ $json.company_url }}",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        896,
+        304
+      ],
+      "id": "c5675894-270a-48b3-bc5c-b57d83dc9fbb",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.0-flash-lite-001",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        912,
+        480
+      ],
+      "id": "85eaff0a-7c25-447d-9a23-90b1987f328d",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "IvpJX9726F8V1ggX",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get Gemini output (company info)\nconst geminiOutput = $input.first().json;\nconst geminiText = geminiOutput.text || geminiOutput.response || JSON.stringify(geminiOutput);\n\nlet companyInfo;\ntry {\n  // Try to parse JSON from Gemini response\n  const jsonMatch = geminiText.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) {\n    companyInfo = JSON.parse(jsonMatch[0]);\n  } else {\n    companyInfo = {};\n  }\n} catch (err) {\n  companyInfo = {};\n}\n\n// Get ALL Apify job data from the previous node\nconst apifyData = $('Run an Actor and get dataset').all();\n\n// Process each Apify item and merge with company info\nconst results = apifyData.map((item, index) => {\n  const job = item.json;\n  \n  return {\n    json: {\n      \"Sector\": job.sector || job.industry || \"\",\n      \"Company Name\": companyInfo.companyName || job.companyName || job.company || \"\",\n      \"Email Address\": companyInfo.companyEmail || \"\",\n      \"Company LinkedIn\": companyInfo.companyUrl || job.companyUrl || job.companyLinkedinUrl || \"\",\n      \"Company Website\": companyInfo.companyWebsite || job.companyWebsite || \"\",\n      \"Experience\": job.juniorlevel || job.entrylevel || \"\",\n      \"Job Title\": job.title || job.jobTitle || \"\",\n      \"Job Apply URL\": job.link || job.applyUrl || job.url || \"\",\n      \"Job Description\": job.description || job.jobDescription || \"\",\n      \"Published Date\": job.listedAt || job.postedDate || job.publishedAt || \"\"\n    }\n  };\n});\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        304
+      ],
+      "id": "176b234a-c6e1-41b3-b0de-4e160f84f6b6",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1A_aw-qsRvcGwzr1qBgJB6do3QhAML_TVGGCpDPzBJqs",
+          "mode": "list",
+          "cachedResultName": "LinkedIn Job Searched",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1A_aw-qsRvcGwzr1qBgJB6do3QhAML_TVGGCpDPzBJqs/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 2002601878,
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1A_aw-qsRvcGwzr1qBgJB6do3QhAML_TVGGCpDPzBJqs/edit#gid=2002601878"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [
+            "Company Name"
+          ],
+          "schema": [
+            {
+              "id": "Company Name",
+              "displayName": "Company Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email Address",
+              "displayName": "Email Address",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Company Linkedin",
+              "displayName": "Company Linkedin",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Company Website",
+              "displayName": "Company Website",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Sector",
+              "displayName": "Sector",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Experience",
+              "displayName": "Experience",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Job Title",
+              "displayName": "Job Title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Job Apply URL",
+              "displayName": "Job Apply URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Job Description",
+              "displayName": "Job Description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Published Date",
+              "displayName": "Published Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1408,
+        304
+      ],
+      "id": "0d4823c0-6aeb-4c16-859a-6f31d24475e0",
+      "name": "Append or update row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "AEtx7ztPlIxCIQAF",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "Datasets",
+        "datasetId": "={{ $json.storageIds.datasets.default }}",
+        "offset": {},
+        "options": {}
+      },
+      "type": "@apify/n8n-nodes-apify.apify",
+      "typeVersion": 1,
+      "position": [
+        720,
+        304
+      ],
+      "id": "a1fbb3ba-a22b-45e6-9d19-5d514939d966",
+      "name": "Get dataset items",
+      "credentials": {
+        "apifyApi": {
+          "id": "sbac2a68WvbbF2UQ",
+          "name": "Apify account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Daily Job Search": {
+      "main": [
+        [
+          {
+            "node": "Prepare Job Titles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Job Titles": {
+      "main": [
+        [
+          {
+            "node": "Run an Actor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run an Actor": {
+      "main": [
+        [
+          {
+            "node": "Get dataset items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Append or update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get dataset items": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "4ccfb0f0-b834-4fba-92fe-9c6b62e43a17",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "bfa1ab1a97ae301d2bc50328e2aea80ab085e15fe8f89a956e7ba6a27e9125dc"
+  },
+  "id": "jLLw4obwIOvveaCJ",
+  "tags": []
+}
